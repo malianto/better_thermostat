@@ -85,6 +85,8 @@ from .utils.const import (
     ATTR_STATE_WINDOW_OPEN,
     ATTR_STATE_ECO_MODE,
     ATTR_STATE_SAVED_TEMPERATURE_ECO,
+    ATTR_STATE_SAVED_HVAC_MODE,
+    ATTR_STATE_SAVED_HVAC_MODE_ECO,
     BETTERTHERMOSTAT_SET_TEMPERATURE_SCHEMA,
     CONF_COOLER,
     CONF_HEATER,
@@ -236,11 +238,12 @@ class BetterThermostat(ClimateEntity, RestoreEntity, ABC):
     _enable_turn_on_off_backwards_compatibility = False
 
     async def set_temp_temperature(self, temperature):
-        """Set temporary target temperature."""
+        """Set temporary target temperature and save current state."""
         self.bt_update_lock = True
         try:
             if self._saved_temperature is None:
                 self._saved_temperature = self.bt_target_temp
+                self._saved_hvac_mode = self.bt_hvac_mode
                 self.bt_target_temp = convert_to_float(
                     temperature, self.device_name, "service.set_temp_temperature()"
                 )
@@ -256,7 +259,7 @@ class BetterThermostat(ClimateEntity, RestoreEntity, ABC):
             self.bt_update_lock = False
 
     async def restore_temp_temperature(self):
-        """Restore the previously saved target temperature."""
+        """Restore the previously saved target temperature and HVAC mode."""
         self.bt_update_lock = True
         try:
             if self._saved_temperature is not None:
@@ -266,6 +269,10 @@ class BetterThermostat(ClimateEntity, RestoreEntity, ABC):
                     "service.restore_temp_temperature()",
                 )
                 self._saved_temperature = None
+                # Restore HVAC mode if it was saved
+                if self._saved_hvac_mode is not None:
+                    self.bt_hvac_mode = self._saved_hvac_mode
+                    self._saved_hvac_mode = None
                 self.async_write_ha_state()
                 await self.control_queue_task.put(self)
         finally:
@@ -274,10 +281,11 @@ class BetterThermostat(ClimateEntity, RestoreEntity, ABC):
     async def set_eco_mode(self, enable: bool):
         """Enable or disable ECO mode for the thermostat.
 
-        When enabling ECO mode, we save the current target temperature in a
-        dedicated ECO save variable and set the target to the configured eco
-        temperature. When disabling, restore the saved ECO temperature if it
-        exists. This function uses a temporary update lock to avoid races.
+        When enabling ECO mode, we save the current target temperature and HVAC
+        mode in dedicated ECO save variables and set the target to the configured
+        eco temperature. When disabling, restore the saved ECO temperature and
+        HVAC mode if they exist. This function uses a temporary update lock to
+        avoid races.
         """
         self.bt_update_lock = True
         try:
@@ -285,6 +293,7 @@ class BetterThermostat(ClimateEntity, RestoreEntity, ABC):
                 if not self.eco_mode:
                     if self.eco_temperature is not None:
                         self._saved_temperature_eco = self.bt_target_temp
+                        self._saved_hvac_mode_eco = self.bt_hvac_mode
                         self.bt_target_temp = self.eco_temperature
                         self.eco_mode = True
                         self.async_write_ha_state()
@@ -294,6 +303,10 @@ class BetterThermostat(ClimateEntity, RestoreEntity, ABC):
                     if self._saved_temperature_eco is not None:
                         self.bt_target_temp = self._saved_temperature_eco
                         self._saved_temperature_eco = None
+                    # Restore HVAC mode if it was saved
+                    if self._saved_hvac_mode_eco is not None:
+                        self.bt_hvac_mode = self._saved_hvac_mode_eco
+                        self._saved_hvac_mode_eco = None
                 self.eco_mode = False
                 self.async_write_ha_state()
                 await self.control_queue_task.put(self)
@@ -460,6 +473,8 @@ class BetterThermostat(ClimateEntity, RestoreEntity, ABC):
         self.startup_running = True
         self._saved_temperature = None
         self._saved_temperature_eco = None  # Separate saved temp for ECO mode
+        self._saved_hvac_mode = None  # HVAC mode saved with temp for restore
+        self._saved_hvac_mode_eco = None  # HVAC mode saved for ECO mode
         self._preset_temperature = (
             None  # Temperature saved before entering any preset mode
         )
@@ -1199,6 +1214,24 @@ class BetterThermostat(ClimateEntity, RestoreEntity, ABC):
                         ),
                         self.device_name,
                         "startup()",
+                    )
+
+                # Restore saved HVAC mode for temp service
+                if (
+                    old_state.attributes.get(ATTR_STATE_SAVED_HVAC_MODE, None)
+                    is not None
+                ):
+                    self._saved_hvac_mode = old_state.attributes.get(
+                        ATTR_STATE_SAVED_HVAC_MODE
+                    )
+
+                # Restore saved HVAC mode for ECO mode
+                if (
+                    old_state.attributes.get(ATTR_STATE_SAVED_HVAC_MODE_ECO, None)
+                    is not None
+                ):
+                    self._saved_hvac_mode_eco = old_state.attributes.get(
+                        ATTR_STATE_SAVED_HVAC_MODE_ECO
                     )
 
             else:
@@ -2062,6 +2095,8 @@ class BetterThermostat(ClimateEntity, RestoreEntity, ABC):
             ATTR_STATE_LAST_CHANGE: self.last_change.isoformat(),
             ATTR_STATE_SAVED_TEMPERATURE: self._saved_temperature,
             ATTR_STATE_SAVED_TEMPERATURE_ECO: self._saved_temperature_eco,
+            ATTR_STATE_SAVED_HVAC_MODE: self._saved_hvac_mode,
+            ATTR_STATE_SAVED_HVAC_MODE_ECO: self._saved_hvac_mode_eco,
             ATTR_STATE_PRESET_TEMPERATURE: self._preset_temperature,
             ATTR_STATE_HUMIDIY: self._current_humidity,
             ATTR_STATE_MAIN_MODE: self.last_main_hvac_mode,

@@ -74,6 +74,8 @@ ATTR_STATE_ERRORS = "errors"
 ATTR_STATE_BATTERIES = "batteries"
 ATTR_STATE_SAVED_TEMPERATURE_ECO = "saved_temperature_eco"
 ATTR_STATE_ECO_MODE = "eco_mode"
+ATTR_STATE_SAVED_HVAC_MODE = "saved_hvac_mode"
+ATTR_STATE_SAVED_HVAC_MODE_ECO = "saved_hvac_mode_eco"
 
 SERVICE_RESTORE_SAVED_TARGET_TEMPERATURE = "restore_saved_target_temperature"
 SERVICE_SET_TEMP_TARGET_TEMPERATURE = "set_temp_target_temperature"

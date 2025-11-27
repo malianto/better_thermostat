@@ -285,12 +285,12 @@ async def trigger_trv_change(self, event):
 
                 _main_change = True
 
-        if self.real_trvs[entity_id]["advanced"].get("no_off_system_mode", False):
-            if _new_heating_setpoint == self.real_trvs[entity_id]["min_temp"]:
-                self.bt_hvac_mode = HVACMode.OFF
-            else:
-                self.bt_hvac_mode = HVACMode.HEAT
-            _main_change = True
+        # NOTE: Removed automatic bt_hvac_mode inference from TRV temperature.
+        # For no_off_system_mode devices, min_temp is used both when:
+        # 1) User wants OFF mode (bt_hvac_mode=OFF)
+        # 2) System doesn't need heat (bt_hvac_mode=HEAT, call_for_heat=False)
+        # Temperature alone cannot distinguish these cases.
+        # User intent (bt_hvac_mode) should only change via explicit user actions.
 
     if _main_change is True:
         self.async_write_ha_state()
